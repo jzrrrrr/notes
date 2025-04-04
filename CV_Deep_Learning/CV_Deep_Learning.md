@@ -104,7 +104,7 @@
 - 如何让 function 足够 _non-linear_：非线性的激活函数的叠加
 - MLP 结构 & _Chain Rule_：Initialization -> Forwarding -> Backpropagation
 
-## Convolutional Neural Network
+## Convolutional Neural Network (CNN)
 
 1. MLP Problems
 	1. **Deep Learning I** 中学习了 FC 全连接网络
@@ -161,11 +161,9 @@
 5. 这 **终于！** 特别好地回答了为什么要 parameter sharing
 6. 结论：CNN with ConvNet 和 pooling layer 对 translation 很好地 invariance，rotation有一点点invariance；CNN在各处有相似质量的local minima
 
-# CNN Training
+# CNN Training Details
 
 > 本节聚焦 Training 的细节和努力减小 Training 和 Test 之间的 Gap
-
-## CNN Training Details
 
 1. Mini-batch SGD：For loop
 	1. _Sample_：Shuffle => Split成batch
@@ -175,7 +173,7 @@
 	4. _Update_
 2. 框架：TensorFlow❎ => PyTorch & CUDA✅
 
-### Data preprocessing
+## Data preprocessing
 
 > 任何操作的目的是 training friendly，但总是 information loss 的
 
@@ -184,7 +182,7 @@
 2. normalize `X /= np.std(X, axis = 0)`：因为不论是ReLU还是sigmoid都对大于0/小于0最为轻松而敏感；(e.g. VGGNet 不除std，ResNet 除了std)
    **假想一种红色std很大而蓝色很小的情况，如果对蓝色-mean再/std，这使图片并不显著的蓝色特征(甚至是噪声)被放的特别大(和红色一样了)，这显然不利，当然这不是常见的情况；例如对一副蓝色扑克牌的数据集我们就最好不要/std**
 
-### Weight Initialization
+## Weight Initialization
 
 1. _Small random numbers_: `W = 0.01 * np.random.randn(Din, Dout)`
    ~okay for small networks, problem with deeper
@@ -204,7 +202,7 @@
 
 > Initialization is still an Active Research Area
 
-### Optimizer
+## Optimizer
 
 1. SGD Problems
 	1. high **condition number**: ratio of largest to smallest singular value of the Hessian matrix is large, 疯狂振荡
@@ -213,7 +211,7 @@
 2. _SGD + Momentum_![](attachment/4536dd27f18ee2484918badd4897d8a3.png)
 3. _Adam_ ![](attachment/2db2b2f15b44c56076c9ea9a3a68168f.png)
 
-### Learning Rate
+## Learning Rate
 
 1. Undershoot & Overshoot![](attachment/1287b148fd8acf1830d8bc89756fe5f4.png)
 2. _Appropriate_ learning rate: 1e-6 ~ 1e-3
@@ -240,7 +238,9 @@
 
 > CNN Training 并不是一件过于黑盒的事情；在各 Optimizer/Parameter 都有很好基础的时代，请不要忘记被调参支配的恐惧. 当你的结果不行，Outline的每一步都可能是造成问题的原因
 
-## Underfitting & Overfitting
+# Underfitting & Overfitting
+
+## BatchNorm
 
 ![](attachment/9d0ab714178476c801130637dccb5eee.png)
 1. _Underfitting_
@@ -275,3 +275,114 @@
 		   C: 一个image的c个channel
 		   H, W: flatten的image pixel
 		4. 后三种都没有Training/Eval Gap；Layer和Instance对一般任务效果都不太好；batch size小的时候Group Norm效果好于Batch Norm![](attachment/a01383250f5d49d34683213807ec379b.png)
+
+## ResNet
+
+> 回顾：
+> 1. He Initialization：对激活函数是ReLU的neuron，假设初始数据符合标准高斯分布，让随机化权重乘以 $\displaystyle \sqrt{ \frac{2}{\text{Din}} }$ 使得没有 Covariance shift
+> 2. 问题：Loss开始BP以后，W变化，distribution也变化，不再满足高斯分布，仍然容易梯度消失 => 引入 Batch Norm 让每一层都变成标准正态分布
+> 3. 问题：每层都是白噪音，capacity不够了 => 引入learnable参数调整分布 (所以初始化为 $\displaystyle (0,1)$ )
+> 4. Batch Norm：使Optimization大大容易了
+> 5. 问题：输出取决于和我一起进Batch的是什么人/TrainMode和EvalMode Loss有很大的差别，但历史证明BatchNorm就是很有用 => 最大的问题就是按照Batch求mean和std
+
+1.6. oblems when CNN gets really deep![](attachment/6749ddc96d8e7d97daa687f67c2dee15.png)
+   56-layer training error更高可以理解：layer越高就越难拟合；test error更高不能理解：说明并非过拟合的问题！我们认为这是一个optimization的问题：deeper model更难优化
+2. Fact: 30-layer的Conv+relu甚至学不出$\displaystyle H(x)=x$，证明后加的层数甚至是有害的：梯度消失 gradient vanishing
+3. Solution: Residual Block/Skip Link![](attachment/fc30eceb1b87c2ca6b1f28bc5abc842e.png)
+	1. 从干坏事的角度来说，相当于更深的layer只学习residual，非常棒地实现了类似Taylor展开中逐项逼近的效果；最差的情况下学到的Residual=0(根据ReLU可以想到这是很容易的)，至少无害；
+	2. 从BP的角度来说，deep layer的gradient也更容易让shallow的neuron update
+	3. Loss Landscape的解释![](attachment/743ac0b235c36ee60b20ac9d168784e4.png)
+
+> **Lecturer**
+> 我们已经学了何凯明的 He Initialization, Group Normalization 和 ResNet；更多地我们关注的是模型的每一个细节，很多时候是细节上的trick带来模型的跨越性的提升(而不是蓝翔性的调参/训练工作)，应该说He的简洁而美好的成果来源于对模型良好的理解
+
+## Overfitting
+
+1. _Early Stopping_![](attachment/083862504cffd21fb5ecaa66d9f38ee6.png)
+	1. `|----------Train----------|--Val--|--Test--|`：作业/模拟考/高考，在规范的benchmark/challenge上val和test应该同分布，test不应该公布；不应该让模型接触val
+	2. 但不能结构上减少train和val之间的gap
+	3. 思路：降低模型的capacity/提高data的diversity
+2. _Data Diversity_
+	4. Simply collect more data (expensive & time-consuming)
+	5. Data augmentation 数据增广 (free & fast)
+		1. 简单地transform image![](attachment/6c9cf61b36d174ba6620b235d0b64280.png)
+		2. Horizontal Flip...![](attachment/7df0707644feadfa50f3af08562d89fa.png)
+		3. Pros: dataset更难了/提高generalization ability/减少overfitting/creat variability/减少class imbalance
+		4. Cons: magnitude of DA cannot be too strong![](attachment/4441d8be1d7d6497941cd1a95acaeed8.png)
+		   **Check**: 例如手动sample一百个augmentation去人眼看看是否正确
+3. _Regularization_
+	1. 限制模型的表达能力：结构上可以让模型更浅；还能添加weight regularization惩罚太大的weight，让loss prefer更简单的模型![](attachment/e7fc07678db22832792b9bf3938f819e.png)
+		1. L2 Regularization $\displaystyle w^{2}$
+		2. L1 Regularization $\displaystyle |w|$
+	2. 很重要的问题：weight regularization是平方和还是平方和的平均？注意平方和会让regularization太大以至于让data loss忽略不计，这就很不好了，干脆给你学出一个全0的weight
+	   => 建议：可以在学习的初始阶段先不加，学好后再加loss；仔细调这个超参lambda
+4. _Dropout_
+	1. 随机把(例如)一半的neuron值设为0
+	2. 原理：让模型对主要特征更加robust![](attachment/7d487571976b146dd6be626ff32e93b5.png)
+	3. 结果BatchNorm也有regularization的效果 (follow Gaussian distribution -> limit capacity -> 帮助overfitting，通过帮助optimization帮助underfitting) => 可以减弱overfitting；或许有了BN我们不再需要dropout
+
+## 结语
+
+1. **Principle**: balance data variability & model capacity (解释: 欠定方程/过定方程)
+2. **Techniques**
+	1. (always good) Data augmentation
+	2. (always good) BatchNorm
+	3. Regularization
+	4. (only FC layers) Dropout
+3. 我们原来说data points的数目应该等于param数，但是或许这也不成立因为每一个neuron都是非线性的(capacity会比线性高)
+4. No BN at the last layer
+	1. 在最后分类结果上它不应该是单峰高斯分布，不许给我加BatchNorm（！
+	2. example structure: `[(Conv-BN-ReLU)*N-?Pool]*M-(FC-BN-ReLU)*K-FC-SoftMax`
+
+## Classification
+
+> 接下来详细来说多分类问题
+
+1. Image Classification
+	1. one-hot vector: Ground Truth应该是一个one-hot vector (只有一个维度是1其他都是0)
+2. 过去的方法
+	2. _Nearest Neighbor Classifier_
+		1. 假设有一个神奇的Distance Metric func可以衡量不同图片之间的语义距离 (那多分类就很简单了)
+		2. 恐怕难找到这样的函数，无论L1 distance; L2 distance还是其他的东西
+	3. _K-Nearest Neighbors (KNN)_
+		1. take **majority vote** from K closest points (所以nearest neighbor就是k=1的情况)
+		2. 问题：首先是distance metric不好说，其次每次得到一个结果要dataset全过一遍这相当吓人
+
+## SoftMax
+
+1. 前面binary classification我们简单地给输入映了一个sigmoid，现在的任务中我们的目的是得到一个尽可能逼近one-hot vector的结果
+2. SoftMax Function: given $\displaystyle s_{i}=f(x_{i},W)$, let $$P(Y=k|X=x_{i})=\frac{e^{ \beta s_{k} }}{\sum_{j}e^{ \beta s_{j} }}$$![](attachment/74dc0d673ced0af05746caadf6f3cb07.png)
+3. 初步符合要求
+	1. 加一块是1
+	2. 值在 $\displaystyle [0,1]$ 之间
+4. 问题：他和 $\displaystyle \text{argmax}\left(\begin{bmatrix}s_{1} \\ s_{2} \\ \vdots  \\ s_{i} \\ \vdots \\ s_{n}\end{bmatrix}\right)$ 有什么区别？
+	1. 分析：如果某一维比较大，它的值会被指数函数放大很多，会趋近于1；$\displaystyle \beta$ 很大的时候Softmax就是argmax，很小的时候就是$\displaystyle \frac{1}{n}$ ($\displaystyle \beta=1$ by default)
+	2. 好处：非交界处有gradient便于优化
+
+## Loss
+
+1. 回顾：之前binary阶段我们通过MLE的思路推导了loss=prob (p if ground truth=1); (1-p if ground truth=0)
+2. 注意其实就是两个vector之间的distance => 我们有很多办法计算distance (要求：$\displaystyle [0,1]$)
+3. _Kullback-Leibler divergence_ $$D_{\text{KL}}(P||Q)=\sum_{x \in \mathscr{X}}P(x)\log\left( \frac{P(x)}{Q(x)} \right)$$
+	1. 性质：>=0, =0 only if P=Q
+	2. 为什么叫divergence而不叫distance？
+		1. 不满足对称性
+		2. 不满足三角不等式
+	3. 事实上KL divergence可以分成两部分![](attachment/aa108c8959c0b6cac995a1711491cb0c.png)
+	4. 如果是one-hot的可以想见混乱度很低熵很小；当然如果ground truth是one-hot的，有0那么必须放在log外面；此时发现H(P)是ground truth的熵(没用) => 引入交叉熵 cross entropy$$\mathscr{L}_{CE}=H(P,Q)=-\sum_{x\in\mathscr{X}}P(x)\mathrm{log~}Q(x)$$
+4. _Cross entropy_
+	1. 当ground truth是one-hot时cross entropy退化为-log(x_label)
+	2. 随机初始化得到的CE=logn
+	3. 无上限(P=1时Q=0)，下限为0
+	4. 其实就是一个NLL(negative log likelihood)
+
+## Summary: CNN for Image Classification & Brief History
+
+我们关心的事情：
+
+1. capacity
+2. fitness for task
+3. optimization
+4. cost
+
+以包含 1000 个 classes，90种狗的ImageNet为例：Top 5 accuracy 2011(75.4%) => CNN(83.6%) => VGG(92.7%) => ResNet(96.4%, 超越人类)
